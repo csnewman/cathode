@@ -17,14 +17,21 @@ html, body {
     font-size: 20px;
 }
 
+.icon {
+    font-size: 50px;
+    text-align: center;
+}
+
 .logo {
     font-size: 50px;
 }
 
 .poster {
-    outline: 2px solid gray;
+    /*border: 2px solid gray;*/
+    box-shadow: 0 0 0 2px gray;
 }
 
 .poster-selected {
-    outline: 8px solid purple;
+    /*outline: 8px solid purple;*/
+    box-shadow: 0 0 0 8px white;
 }

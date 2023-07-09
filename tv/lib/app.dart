@@ -12,6 +12,7 @@ class Poster extends Widget {
         nameBox = html.DivElement() {
     img.style.borderRadius = "10px";
     img.style.position = "absolute";
+    img.style.backgroundColor = "gray";
 
     nameBox.style.position = "absolute";
 
@@ -54,6 +55,7 @@ class Poster extends Widget {
   set width(double value) {
     _width = value;
     img.style.width = "${value}px";
+    img.style.height = "${value * 1.5}px";
     nameBox.style.width = "${value}px";
 
     _updateBox();
@@ -85,91 +87,95 @@ class Poster extends Widget {
   @override
   void create() {
     screen.addElement(img);
-    screen.addElement(nameBox);
+    // screen.addElement(nameBox);
   }
 
   @override
   void destroy() {
     img.remove();
-    nameBox.remove();
+    // nameBox.remove();
   }
 }
 
-class Logo extends Widget {
-  html.DivElement elem;
-  double _x = 0;
-  double _y = 0;
+class Sidebar extends Widget {
+  html.DivElement bg, icon;
 
-  Logo() : elem = html.DivElement() {
-    elem.style.position = "absolute";
-    elem.className = "logo";
-    elem.innerText = "Cathode";
-    elem.style.fontSize = "50px";
+  Sidebar()
+      : bg = html.DivElement(),
+        icon = html.DivElement() {
+    bg.style.position = "absolute";
+    bg.style.zIndex = "1000";
+    bg.style.left = "0px";
+    bg.style.top = "0px";
+    bg.style.bottom = "0px";
+    bg.style.width = "75px";
+    bg.style.backgroundColor = "gray";
 
-    elem.style.width = "1000px";
-    x = 0;
-    y = 0;
-  }
+    icon.style.position = "absolute";
+    icon.style.zIndex = "1001";
+    icon.style.left = "0px";
+    icon.style.top = "0px";
+    icon.style.height = "75px";
+    icon.style.lineHeight = "75px";
+    icon.style.width = "75px";
 
-  double get x {
-    return _x;
-  }
-
-  set x(double value) {
-    _x = value;
-    elem.style.left = "${value}px";
-  }
-
-  double get y {
-    return _y;
-  }
-
-  set y(double value) {
-    _y = value;
-    elem.style.top = "${value}px";
+    icon.style.backgroundColor = "green";
+    icon.className = "icon";
+    icon.innerText = "C";
   }
 
   @override
   void create() {
-    screen.addElement(elem);
+    screen.addElement(bg);
+    screen.addElement(icon);
   }
 
   @override
+  void update() {}
+
+  @override
   void destroy() {
-    elem.remove();
+    bg.remove();
+    icon.remove();
   }
 }
 
 class LibraryView extends Widget {
-  late Logo logo;
+  html.DivElement top;
+  late Sidebar sidebar;
   late List<Poster> posters;
+
+  LibraryView() : top = html.DivElement() {
+    top.style.position = "absolute";
+    top.style.zIndex = "1000";
+    top.style.left = "0px";
+    top.style.right = "0px";
+    top.style.top = "0px";
+    top.style.height = "75px";
+    top.style.backgroundColor = "dimgray";
+  }
 
   @override
   void create() {
-    logo = mount(Logo());
+    sidebar = mount(Sidebar());
     posters = List<Poster>.empty(growable: true);
+
+    screen.addElement(top);
+
     update();
   }
 
-  var offset = 0;
-
   @override
   void update() {
-    // var y = 0;
-
-    for (var p in posters) {
-      p.x = 0;
-      p.y = 0;
-    }
-
     var width = screen.width - leftPad - rightBar;
+    var availableHeight = screen.height - 100;
+    var posterHeight = availableHeight / 2.5;
+    var posterWidth = posterHeight / 1.5;
 
     var xCount =
         ((width + posterSpacing) / (posterWidth + posterSpacing)).floor();
-    var yCount = 4;
     var interPad = (width - xCount * posterWidth) / (xCount - 1);
-
-    vertMove = xCount;
+    var yCount = 3;
 
     for (var i = posters.length; i < xCount * yCount; i++) {
       posters.add(Poster());
@@ -179,17 +185,22 @@ class LibraryView extends Widget {
       unmount(posters.removeLast());
     }
 
-    if ((position - offset) >= 3 * xCount) {
-      // position -= xCount;
-      offset += xCount;
-    } else if (position - offset < 0) {
-      offset -= xCount;
+    if (positionX < 0) {
+      positionX = 0;
+    } else if (positionX >= xCount) {
+      positionX = xCount - 1;
     }
 
-    // var offset = 0;
-    var id = 0;
+    if (positionY < 0) {
+      positionY = 0;
+    }
 
-    var y = 60.0;
+    var y = 100.0;
+    if (positionY > 0) {
+      y += (availableHeight / 2) - (1.5 * posterHeight + interPad);
+    }
+
+    var id = 0;
     for (var j = 0; j < yCount; j++) {
       var x = leftPad;
       for (var i = 0; i < xCount; i++) {
@@ -199,9 +210,10 @@ class LibraryView extends Widget {
         poster.y = y;
         poster.width = posterWidth;
 
-        var displayId = offset + id;
+        poster.selected = i == positionX &&
+            ((j == 0 && positionY == 0) || (j == 1 && positionY != 0));
 
-        poster.selected = displayId == position;
+        var displayId = (positionY + j) * xCount + i;
         poster.path = imgs[displayId % imgs.length];
         poster.name = names[displayId % names.length];
 
@@ -209,7 +221,7 @@ class LibraryView extends Widget {
         id++;
       }
 
-      y += posterWidth * 1.5 + interPad + 10;
+      y += posterHeight + interPad;
     }
 
     for (var p in posters) {
@@ -221,7 +233,6 @@ class LibraryView extends Widget {
   void destroy() {}
 }
 
-const leftPad = 20.0;
-const rightBar = 100.0;
-const posterWidth = 200.0;
+const leftPad = 100.0;
+const rightBar = 75.0;
 const posterSpacing = 20.0;

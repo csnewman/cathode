@@ -1,8 +1,8 @@
 import 'widget.dart';
 import 'dart:html' as html;
 
-var position = 0;
-var vertMove = 0;
+var positionX = 0;
+var positionY = 0;
 
 class Screen {
   late Widget root;
@@ -27,16 +27,16 @@ class Screen {
       print(evt.key);
 
       if (evt.key == "ArrowRight") {
-        position++;
+        positionX++;
         render();
       } else if (evt.key == "ArrowLeft") {
-        position--;
+        positionX--;
         render();
       } else if (evt.key == "ArrowUp") {
-        position -= vertMove;
+        positionY--;
         render();
       } else if (evt.key == "ArrowDown") {
-        position += vertMove;
+        positionY++;
         render();
       }
     });
