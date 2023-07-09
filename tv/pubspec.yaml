@@ -1,0 +1,12 @@
+name: cathode_tv
+description: Cathode client for TVs.
+version: 1.0.0
+repository: https://github.com/csnewman/cathode
+
+environment:
+  sdk: ^3.0.5
+
+dev_dependencies:
+  build_runner: ^2.4.0
+  build_web_compilers: ^4.0.0
+  lints: ^2.0.0
