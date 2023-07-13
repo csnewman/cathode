@@ -1,6 +1,7 @@
 package mediaserver
 
 import (
+	"context"
 	"log"
 
 	"github.com/csnewman/cathode/shared"
@@ -28,32 +29,15 @@ func (s *Server) Close() error {
 	return s.db.Close()
 }
 
-type Test struct {
-	Server string `json:"server"`
-	Made   bool   `json:"made"`
-}
+func (s *Server) Run(ctx context.Context) error {
+	nm, err := NewNetworkManager(s.logger, s.db)
+	if err != nil {
+		return err
+	}
 
-func (s *Server) Run() error {
-	return s.db.Transact(true, func(tx *shared.Tx) error {
-		var test Test
+	nm.Refresh(ctx)
 
-		if err := tx.Get("test", &test); err != nil {
-			s.logger.Error("test", "e", err)
+	nm.Run(ctx)
 
-			return err
-		}
-
-		test = Test{
-			Server: "123",
-			Made:   true,
-		}
-
-		if err := tx.Set("test", test); err != nil {
-			s.logger.Error("test-set", "e", err)
-
-			return err
-		}
-
-		return nil
-	})
+	return nil
 }

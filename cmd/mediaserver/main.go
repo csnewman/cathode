@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"strings"
 
@@ -23,12 +24,14 @@ func main() {
 		},
 	}))
 
-	logger.Info("Cathode MediaServer")
+	logger.Info("Cathode Media Server")
 
 	ms := mediaserver.NewServer(logger)
 	defer ms.Close()
 
-	if err := ms.Run(); err != nil {
+	ctx := context.Background()
+
+	if err := ms.Run(ctx); err != nil {
 		logger.Error("Server Crashed", "err", err)
 	} else {
 		logger.Error("Server Stopped")

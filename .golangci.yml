@@ -21,6 +21,7 @@ linters:
     - cyclop
     - ireturn
     - bodyclose
+    - godox
 linters-settings:
   gocritic:
     disabled-checks:
