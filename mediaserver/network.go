@@ -112,6 +112,8 @@ func (m *NetworkManager) Refresh(ctx context.Context) {
 
 	m.certs = certs
 	m.store.Entries = entries
+
+	m.logger.Info("Network refreshed")
 }
 
 func (m *NetworkManager) refreshDSDM(ctx context.Context, server string, entry DSDMEntry) (DSDMEntry, error) {
@@ -174,6 +176,10 @@ func (m *NetworkManager) refreshDSDM(ctx context.Context, server string, entry D
 }
 
 func (m *NetworkManager) Run(_ context.Context) {
+	for _, entry := range m.store.Entries {
+		m.logger.Info("Address", "url", fmt.Sprintf("https://127-0-0-1-v4.%s:8443", entry.Domain))
+	}
+
 	m.createServer(8443)
 }
 
