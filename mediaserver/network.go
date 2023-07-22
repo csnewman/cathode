@@ -5,12 +5,16 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/csnewman/cathode/shared"
 	dsdm "github.com/csnewman/dyndirect/go"
 	"github.com/go-acme/lego/v4/certcrypto"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/google/uuid"
 	"golang.org/x/exp/slog"
 )
@@ -45,6 +49,7 @@ type NetworkManager struct {
 	db     *shared.DB
 	store  *NetworkStore
 	certs  map[string]*tls.Certificate
+	router *chi.Mux
 }
 
 func NewNetworkManager(logger *slog.Logger, db *shared.DB) (*NetworkManager, error) {
@@ -77,11 +82,29 @@ func NewNetworkManager(logger *slog.Logger, db *shared.DB) (*NetworkManager, err
 		return nil, err
 	}
 
-	return &NetworkManager{
+	m := &NetworkManager{
 		logger: logger,
 		db:     db,
 		store:  store,
-	}, nil
+	}
+
+	m.router = chi.NewRouter()
+	m.router.Use(m.loggerMiddleware)
+	m.router.Use(m.recoverMiddleware)
+
+	m.router.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"https://*", "http://*"},
+		AllowedMethods:   []string{"GET", "POST"},
+		AllowedHeaders:   []string{"Accept", "Content-Type"},
+		ExposedHeaders:   []string{},
+		AllowCredentials: false,
+		MaxAge:           300,
+	}))
+
+	m.router.HandleFunc("/v1", m.handleV1Request)
+	m.router.HandleFunc("/*", m.fallbackRoute)
+
+	return m, nil
 }
 
 func (m *NetworkManager) Refresh(ctx context.Context) {
@@ -193,6 +216,7 @@ func (m *NetworkManager) createServer(port int) {
 			MinVersion:     tls.VersionTLS12,
 			GetCertificate: m.resolveCertificate,
 		},
+		Handler: m.router,
 	}
 
 	err := hs.ListenAndServeTLS("", "")
@@ -213,4 +237,58 @@ func (m *NetworkManager) resolveCertificate(info *tls.ClientHelloInfo) (*tls.Cer
 	}
 
 	return cert, nil
+}
+
+func (m *NetworkManager) loggerMiddleware(next http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+
+		t1 := time.Now()
+		defer func() {
+			m.logger.Debug(
+				"Request",
+				"path", r.RequestURI,
+				"status", ww.Status(),
+				"size", ww.BytesWritten(),
+				"time", time.Since(t1),
+			)
+		}()
+
+		next.ServeHTTP(ww, r)
+	}
+
+	return http.HandlerFunc(fn)
+}
+
+func (m *NetworkManager) recoverMiddleware(next http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rvr := recover(); rvr != nil {
+				//nolint:errorlint,goerr113
+				if rvr == http.ErrAbortHandler {
+					// we don't recover http.ErrAbortHandler so the response
+					// to the client is aborted, this should not be logged
+					panic(rvr)
+				}
+
+				m.logger.Error(
+					"Request panic",
+					"err", rvr,
+					"stack", debug.Stack(),
+				)
+
+				if r.Header.Get("Connection") != "Upgrade" {
+					w.WriteHeader(http.StatusBadRequest)
+				}
+			}
+		}()
+
+		next.ServeHTTP(w, r)
+	}
+
+	return http.HandlerFunc(fn)
+}
+
+func (m *NetworkManager) fallbackRoute(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusBadRequest)
 }
