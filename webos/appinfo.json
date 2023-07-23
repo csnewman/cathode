@@ -1,0 +1,10 @@
+{
+  "id": "media.cathode.hosted",
+  "version": "0.0.1",
+  "vendor": "Cathode Project",
+  "type": "web",
+  "main": "index.html",
+  "title": "Cathode",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png"
+}
