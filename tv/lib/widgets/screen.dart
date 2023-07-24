@@ -11,6 +11,8 @@ class Screen {
 
   double get height => html.window.innerHeight! as double;
 
+  bool _redrawRequested = false;
+
   void addElement(html.Element elem) {
     html.document.body!.children.add(elem);
   }
@@ -21,33 +23,42 @@ class Screen {
   }
 
   void run() {
-    html.window.addEventListener("resize", (event) => render());
+    html.window.addEventListener("resize", (event) => requestRedraw());
     html.window.addEventListener("keydown", (event) {
       var evt = event as html.KeyboardEvent;
       print(evt.key);
 
       if (evt.key == "ArrowRight") {
         positionX++;
-        render();
+        requestRedraw();
       } else if (evt.key == "ArrowLeft") {
         positionX--;
-        render();
+        requestRedraw();
       } else if (evt.key == "ArrowUp") {
         positionY--;
-        render();
+        requestRedraw();
       } else if (evt.key == "ArrowDown") {
         positionY++;
-        render();
+        requestRedraw();
       }
     });
 
     root.init(this);
 
-    render();
+    requestRedraw();
   }
 
-  void render() {
-    root.update();
-    // root.
+  void requestRedraw() {
+    if (_redrawRequested) {
+      return;
+    }
+
+    _redrawRequested = true;
+
+    html.window.requestAnimationFrame((highResTime) {
+      _redrawRequested = false;
+
+      root.update();
+    });
   }
 }
