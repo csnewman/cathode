@@ -10,6 +10,8 @@ import (
 	"golang.org/x/exp/slog"
 )
 
+const DebugDB = false
+
 type DB struct {
 	logger *slog.Logger
 	db     *badger.DB
@@ -77,7 +79,9 @@ func (t *Tx) Set(key string, value any) error {
 func (t *Tx) GetRaw(key string) ([]byte, error) {
 	item, err := t.txn.Get([]byte(key))
 	if errors.Is(err, badger.ErrKeyNotFound) {
-		t.logger.Debug("GetRaw", "key", key)
+		if DebugDB {
+			t.logger.Debug("GetRaw", "key", key)
+		}
 
 		return nil, nil
 	} else if err != nil {
@@ -89,19 +93,25 @@ func (t *Tx) GetRaw(key string) ([]byte, error) {
 		return nil, err
 	}
 
-	t.logger.Debug("GetRaw", "key", key, "value", value)
+	if DebugDB {
+		t.logger.Debug("GetRaw", "key", key, "value", value)
+	}
 
 	return value, nil
 }
 
 func (t *Tx) SetRaw(key string, value []byte) error {
-	t.logger.Debug("SetRaw", "key", key, "value", value)
+	if DebugDB {
+		t.logger.Debug("SetRaw", "key", key, "value", value)
+	}
 
 	return t.txn.Set([]byte(key), value)
 }
 
 func (t *Tx) Delete(key string) error {
-	t.logger.Debug("Delete", "key", key)
+	if DebugDB {
+		t.logger.Debug("Delete", "key", key)
+	}
 
 	return t.txn.Delete([]byte(key))
 }
