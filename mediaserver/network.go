@@ -120,6 +120,7 @@ func (m *NetworkManager) Refresh(ctx context.Context) {
 		}
 
 		entries[server] = newEntry
+		m.store.Entries = entries
 
 		err = m.db.Transact(true, func(tx *shared.Tx) error {
 			return tx.Set(NetworkStoreKey, &m.store)
@@ -134,7 +135,6 @@ func (m *NetworkManager) Refresh(ctx context.Context) {
 	}
 
 	m.certs = certs
-	m.store.Entries = entries
 
 	m.logger.Info("Network refreshed")
 }
