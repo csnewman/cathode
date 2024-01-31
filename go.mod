@@ -4,6 +4,7 @@ go 1.20
 
 require (
 	github.com/csnewman/dyndirect/go v0.2.0
+	github.com/csnewman/ffmpeg-go v0.5.0
 	github.com/cyruzin/golang-tmdb v1.5.1
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/go-acme/lego/v4 v4.12.3
