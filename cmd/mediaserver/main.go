@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/csnewman/cathode/mediaserver"
+	"github.com/csnewman/cathode/internal/mediaserver"
 	"golang.org/x/exp/slog"
 )
 
@@ -24,16 +24,22 @@ func main() {
 		},
 	}))
 
-	logger.Info("Cathode Media Server")
-
-	ms := mediaserver.NewServer(logger)
-	defer ms.Close()
-
-	ctx := context.Background()
-
-	if err := ms.Run(ctx); err != nil {
+	if err := mainErr(logger); err != nil {
 		logger.Error("Server Crashed", "err", err)
 	} else {
 		logger.Error("Server Stopped")
 	}
+}
+
+func mainErr(logger *slog.Logger) error {
+	logger.Info("Cathode Media Server")
+
+	ms, err := mediaserver.New(logger)
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+
+	return ms.Run(ctx)
 }

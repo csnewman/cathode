@@ -8,11 +8,11 @@ import (
 
 type Migrator struct {
 	logger *slog.Logger
-	db     *Db
+	db     *DB
 }
 
-func NewMigrator(logger *slog.Logger, db *Db) (*Migrator, error) {
-	err := db.Write(context.Background(), func(ctx context.Context, tx WTx) error {
+func NewMigrator(ctx context.Context, logger *slog.Logger, db *DB) (*Migrator, error) {
+	err := db.Write(ctx, func(ctx context.Context, tx WTx) error {
 		return tx.Exec(`
 			CREATE TABLE IF NOT EXISTS migrations (
 				id INTEGER PRIMARY KEY,

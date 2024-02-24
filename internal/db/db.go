@@ -11,7 +11,7 @@ type Row = sqlitepool.Row
 
 type Rows = sqlitepool.Rows
 
-type Db struct {
+type DB struct {
 	pool *sqlitepool.Pool
 }
 
@@ -31,7 +31,7 @@ type WTx interface {
 	QueryRow(sql string, args ...any) *Row
 }
 
-func Open(path string) (*Db, error) {
+func Open(path string) (*DB, error) {
 	pool, err := sqlitepool.NewPool(
 		path,
 		4,
@@ -42,16 +42,16 @@ func Open(path string) (*Db, error) {
 		return nil, err
 	}
 
-	return &Db{
+	return &DB{
 		pool,
 	}, nil
 }
 
-func (d *Db) Close() error {
+func (d *DB) Close() error {
 	return d.pool.Close()
 }
 
-func (d *Db) Write(ctx context.Context, fn func(ctx context.Context, tx WTx) error) error {
+func (d *DB) Write(ctx context.Context, fn func(ctx context.Context, tx WTx) error) error {
 	tx, err := d.pool.BeginTx(ctx, "db::write")
 	if err != nil {
 		return err
@@ -66,7 +66,7 @@ func (d *Db) Write(ctx context.Context, fn func(ctx context.Context, tx WTx) err
 	return tx.Commit()
 }
 
-func (d *Db) Read(ctx context.Context, fn func(ctx context.Context, tx RTx) error) error {
+func (d *DB) Read(ctx context.Context, fn func(ctx context.Context, tx RTx) error) error {
 	rx, err := d.pool.BeginRx(ctx, "db::read")
 	if err != nil {
 		return err

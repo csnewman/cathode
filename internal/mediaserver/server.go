@@ -9,7 +9,7 @@ import (
 
 type Server struct {
 	logger *slog.Logger
-	db     *db.Db
+	db     *db.DB
 }
 
 func New(logger *slog.Logger) (*Server, error) {
@@ -25,7 +25,7 @@ func New(logger *slog.Logger) (*Server, error) {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	m, err := db.NewMigrator(s.logger, s.db)
+	m, err := db.NewMigrator(ctx, s.logger, s.db)
 	if err != nil {
 		return err
 	}
