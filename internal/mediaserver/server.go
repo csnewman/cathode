@@ -2,14 +2,16 @@ package mediaserver
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 
 	"github.com/csnewman/cathode/internal/db"
-	"golang.org/x/exp/slog"
 )
 
 type Server struct {
-	logger *slog.Logger
-	db     *db.DB
+	logger  *slog.Logger
+	db      *db.DB
+	network *NetworkManager
 }
 
 func New(logger *slog.Logger) (*Server, error) {
@@ -18,24 +20,23 @@ func New(logger *slog.Logger) (*Server, error) {
 		return nil, err
 	}
 
+	nm := NewNetworkManager(logger, db)
+
 	return &Server{
-		logger: logger,
-		db:     db,
+		logger:  logger,
+		db:      db,
+		network: nm,
 	}, nil
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	m, err := db.NewMigrator(ctx, s.logger, s.db)
-	if err != nil {
-		return err
+	if err := s.migrate(ctx); err != nil {
+		return fmt.Errorf("failed to migrate db: %w", err)
 	}
 
-	version, err := m.CurrentVersion(ctx)
-	if err != nil {
-		return err
-	}
+	s.network.Refresh(ctx)
 
-	s.logger.Debug("Migration start", "current", version)
+	s.network.Run(ctx)
 
 	return nil
 }

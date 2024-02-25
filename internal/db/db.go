@@ -35,7 +35,7 @@ func Open(path string) (*DB, error) {
 	pool, err := sqlitepool.NewPool(
 		path,
 		4,
-		func(d sqliteh.DB) error { return nil },
+		func(_ sqliteh.DB) error { return nil },
 		nil,
 	)
 	if err != nil {
@@ -66,6 +66,19 @@ func (d *DB) Write(ctx context.Context, fn func(ctx context.Context, tx WTx) err
 	return tx.Commit()
 }
 
+func WriteWithData[T any](ctx context.Context, d *DB, fn func(ctx context.Context, tx WTx) (T, error)) (T, error) {
+	var res T
+
+	err := d.Write(ctx, func(ctx context.Context, tx WTx) error {
+		v, err := fn(ctx, tx)
+		res = v
+
+		return err
+	})
+
+	return res, err
+}
+
 func (d *DB) Read(ctx context.Context, fn func(ctx context.Context, tx RTx) error) error {
 	rx, err := d.pool.BeginRx(ctx, "db::read")
 	if err != nil {
@@ -75,4 +88,17 @@ func (d *DB) Read(ctx context.Context, fn func(ctx context.Context, tx RTx) erro
 	defer rx.Rollback()
 
 	return fn(ctx, rx)
+}
+
+func ReadWithData[T any](ctx context.Context, d *DB, fn func(ctx context.Context, tx RTx) (T, error)) (T, error) {
+	var res T
+
+	err := d.Read(ctx, func(ctx context.Context, tx RTx) error {
+		v, err := fn(ctx, tx)
+		res = v
+
+		return err
+	})
+
+	return res, err
 }
