@@ -27,8 +27,6 @@ type WTx interface {
 	Exec(sql string, args ...any) error
 
 	ExecRes(sql string, args ...any) (rowsAffected int64, err error)
-
-	QueryRow(sql string, args ...any) *Row
 }
 
 func Open(path string) (*DB, error) {
