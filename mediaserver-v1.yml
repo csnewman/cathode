@@ -1,0 +1,72 @@
+openapi: '3.0.2'
+info:
+  title: Cathode Media Server
+  version: '1.0'
+paths:
+  /transcode/{transcodeId}/manifest.m3u8:
+    get:
+      summary: Transcode Manifest M3U8
+      operationId: get-transcode-manifest-m3u8
+      description: Returns the M3U8 encoded manifest for this transcode.
+      parameters:
+        - in: path
+          name: transcodeId
+          description: ID of the transcode session.
+          schema:
+            type: string
+            format: uuid
+            description: Transcode ID.
+          required: true
+          example: 3c27e050-8366-4988-9931-9fc9d7ad1ab6
+      responses:
+        '200':
+          description: Success.
+          content:
+            application/vnd.apple.mpegurl:
+              schema:
+                type: string
+                format: binary
+  /transcode/{transcodeId}/{segment}:
+    get:
+      summary: Transcode Segment
+      operationId: get-transcode-segment
+      description: Returns the specified segment for this transcode.
+      parameters:
+        - in: path
+          name: transcodeId
+          description: ID of the transcode session.
+          schema:
+            type: string
+            format: uuid
+            description: Transcode ID.
+          required: true
+          example: 3c27e050-8366-4988-9931-9fc9d7ad1ab6
+        - in: path
+          name: segment
+          description: Segment name.
+          schema:
+            type: string
+            description: Segment name.
+          required: true
+          example: init.mp4
+      responses:
+        '200':
+          description: Success.
+          content:
+            video/*:
+              schema:
+                type: string
+                format: binary
+components:
+  schemas:
+    ErrorResponse:
+      title: ErrorResponse
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+        - message

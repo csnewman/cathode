@@ -25,7 +25,7 @@ type NetworkManager struct {
 	router *chi.Mux
 }
 
-func NewNetworkManager(logger *slog.Logger, db *db.DB) *NetworkManager {
+func NewNetworkManager(logger *slog.Logger, db *db.DB) (*NetworkManager, error) {
 	m := &NetworkManager{
 		logger: logger,
 		db:     db,
@@ -44,10 +44,17 @@ func NewNetworkManager(logger *slog.Logger, db *db.DB) *NetworkManager {
 		MaxAge:           300,
 	}))
 
-	//m.router.HandleFunc("/v1", m.handleV1Request)
-	m.router.HandleFunc("/*", m.fallbackRoute)
+	v1, err := newV1API(logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create v1: %w")
+	}
 
-	return m
+	m.router.Mount("/api/v1", v1.router)
+	m.router.HandleFunc("/api/*", m.fallbackAPIRoute)
+	m.router.HandleFunc("/api", m.fallbackAPIRoute)
+	m.router.HandleFunc("/*", m.fallbackPageRoute)
+
+	return m, nil
 }
 
 func (m *NetworkManager) Refresh(ctx context.Context) {
@@ -265,6 +272,12 @@ func (m *NetworkManager) recoverMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(fn)
 }
 
-func (m *NetworkManager) fallbackRoute(w http.ResponseWriter, _ *http.Request) {
+func (m *NetworkManager) fallbackAPIRoute(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusBadRequest)
+	_, _ = w.Write([]byte("invalid api version"))
+}
+
+func (m *NetworkManager) fallbackPageRoute(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("Nothing to see here"))
 }

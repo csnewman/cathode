@@ -20,7 +20,10 @@ func New(logger *slog.Logger) (*Server, error) {
 		return nil, err
 	}
 
-	nm := NewNetworkManager(logger, db)
+	nm, err := NewNetworkManager(logger, db)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Server{
 		logger:  logger,

@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/csnewman/cathode/internal/mediaserver"
-	"golang.org/x/exp/slog"
 )
 
 func main() {
