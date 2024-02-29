@@ -30,6 +30,9 @@ type ErrorResponse struct {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Plugin Transport Connect
+	// (CONNECT /plugin/transport)
+	ConnectPluginTransport(w http.ResponseWriter, r *http.Request)
 	// Transcode Manifest M3U8
 	// (GET /transcode/{transcodeId}/manifest.m3u8)
 	GetTranscodeManifestM3u8(w http.ResponseWriter, r *http.Request, transcodeId openapi_types.UUID)
@@ -41,6 +44,12 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// Plugin Transport Connect
+// (CONNECT /plugin/transport)
+func (_ Unimplemented) ConnectPluginTransport(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // Transcode Manifest M3U8
 // (GET /transcode/{transcodeId}/manifest.m3u8)
@@ -62,6 +71,21 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ConnectPluginTransport operation middleware
+func (siw *ServerInterfaceWrapper) ConnectPluginTransport(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConnectPluginTransport(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r.WithContext(ctx))
+}
 
 // GetTranscodeManifestM3u8 operation middleware
 func (siw *ServerInterfaceWrapper) GetTranscodeManifestM3u8(w http.ResponseWriter, r *http.Request) {
@@ -238,6 +262,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Connect(options.BaseURL+"/plugin/transport", wrapper.ConnectPluginTransport)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/transcode/{transcodeId}/manifest.m3u8", wrapper.GetTranscodeManifestM3u8)
 	})
 	r.Group(func(r chi.Router) {
@@ -245,6 +272,13 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 
 	return r
+}
+
+type ConnectPluginTransportRequestObject struct {
+}
+
+type ConnectPluginTransportResponseObject interface {
+	VisitConnectPluginTransportResponse(w http.ResponseWriter) error
 }
 
 type GetTranscodeManifestM3u8RequestObject struct {
@@ -305,6 +339,9 @@ func (response GetTranscodeSegment200VideoResponse) VisitGetTranscodeSegmentResp
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// Plugin Transport Connect
+	// (CONNECT /plugin/transport)
+	ConnectPluginTransport(ctx context.Context, request ConnectPluginTransportRequestObject) (ConnectPluginTransportResponseObject, error)
 	// Transcode Manifest M3U8
 	// (GET /transcode/{transcodeId}/manifest.m3u8)
 	GetTranscodeManifestM3u8(ctx context.Context, request GetTranscodeManifestM3u8RequestObject) (GetTranscodeManifestM3u8ResponseObject, error)
@@ -340,6 +377,30 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// ConnectPluginTransport operation middleware
+func (sh *strictHandler) ConnectPluginTransport(w http.ResponseWriter, r *http.Request) {
+	var request ConnectPluginTransportRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ConnectPluginTransport(ctx, request.(ConnectPluginTransportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ConnectPluginTransport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ConnectPluginTransportResponseObject); ok {
+		if err := validResponse.VisitConnectPluginTransportResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // GetTranscodeManifestM3u8 operation middleware
@@ -398,15 +459,16 @@ func (sh *strictHandler) GetTranscodeSegment(w http.ResponseWriter, r *http.Requ
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/+RSPW/bPBD+K8SNL2RZifImttamKDx4SdopyMCQJ5uF+VHyZDQw9N+Lo2XZcV0gGTp1",
-	"Em3y+bjnnh0ob4N36ChBs4Ok1mhlPn6O0ccHTMG7hPxHiD5gJIP5GvmaD/QaEBpIFI1bQV+AxZTkCi/c",
-	"9QVE/NGZiBqap4HiCHgugAxtGPFWvDgQ+ZfvqAh6ZjKu9VljgHyStPYaxRK1keIR4xaZfIsxGe+ggauy",
-	"Yns+oJPBQAN1WZXXUECQtM4zTSlKl5TXON2Nx4Xup1Y602Ki0tbdjF+ukPijMaloAu0FHpC66JKgNYpl",
-	"/W0m0DGBFge4aH0UtDZJjOwlZEdRMsdCQwNfkL4ebpcDcMmybDRKi4QxQfN0rr64F77N2iO5SJh4eBbB",
-	"n9KGHFStru+w+r+azOrb28nNfDabzOf11WTeqrm+k/pKvtwC5wtNjgYKcNIy8iQTOF0lxQ6LoTu/xzJO",
-	"Ixb37KT10UqCBrrO6ONux5I8M/V+83kr11XFH+UdocuxyxA2RuXIplunS/6NpQ246uLmWGM+jWIvxsn4",
-	"ekGuL878PnZKYUpl7mvqrGXc6RiHreQl51d/LM4u4cqio/5dpUkBlWkNajHAPlyYxz3un+lKcU4wBCDY",
-	"xdtRjDNU2nBz2W4ag3uv1XOlj9d4azT66X9/v7CHVvR93/8KAAD//4tQuq3yBQAA",
+	"H4sIAAAAAAAC/+RTTW8aMRD9K9Ycq2UhIU1gr01VcUCtklQ9RDkYexZc4Y96vKgR2v9ejVl2ExJVyaGn",
+	"3ozNe2/em7d7UN4G79AlgmoPpDZoZT5+jtHHG6TgHSFfhOgDxmQwPyM/8yE9BoQKKEXj1tAWYJFIrvGV",
+	"t7aAiL8aE1FDdd9RDICHApJJW0Y8Fy+ORH71E1WClpmMq33W6CCfZNp4jWKJ2khxi3GHTL7DSMY7qOCs",
+	"nPB4PqCTwUAF03JSnkMBQaZN9jQO22Zt3DhF6Sj4mPhSeedYtNqDRlLRhHTg+xrQkZDiB67ujgCxkoRa",
+	"rIw2glJEaUvIklEyaqF50APht6zVI4GzOfglqFyz3RZAjbUyPkIFhz+LQacjyZke5lVe43jfHxe6HVvp",
+	"TI2USjttZmxgja/4uMHUREcibVAsp99nAh0TaHGEi9pHkTaGRM/+0tUXTHfH12UHXLIs5xulxYSRoLo/",
+	"VV9cC19n7Z5cEBLvjEXwt7Qh73eqzq9w8nEymk0vL0cX89lsNJ9Pz0bzWs31ldRncnUJXAuo8kahACct",
+	"I59kAk8bmGKDRVf5l7H0bsTimiepfbQyQQVNY/RQyb7bD88WuIfzyaSrT0KXY5chbI3KkY13Tpf8G0sb",
+	"cN3E7fD18akXWxnHDXgp1xYn8942SiFRmSsxNGewcdxKXvLfi7MnXFt0qX1TaSigMrVBLTrYuwtze8D9",
+	"N10pTgm6AARP8dyKcSaVNly8Pi71wb111FOl99d4ZzT68Yd/X9hjK9q2bf8EAAD//1wWQ8apBgAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

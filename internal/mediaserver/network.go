@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"runtime/debug"
 	"strings"
@@ -16,6 +17,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/quic-go/quic-go/http3"
+	"github.com/quic-go/webtransport-go"
 )
 
 type NetworkManager struct {
@@ -23,6 +26,7 @@ type NetworkManager struct {
 	db     *db.DB
 	certs  map[string]*tls.Certificate
 	router *chi.Mux
+	h3s    *webtransport.Server
 }
 
 func NewNetworkManager(logger *slog.Logger, db *db.DB) (*NetworkManager, error) {
@@ -44,9 +48,9 @@ func NewNetworkManager(logger *slog.Logger, db *db.DB) (*NetworkManager, error) 
 		MaxAge:           300,
 	}))
 
-	v1, err := newV1API(logger)
+	v1, err := newV1API(logger, m.upgradeWT)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create v1: %w")
+		return nil, fmt.Errorf("failed to create v1: %w", err)
 	}
 
 	m.router.Mount("/api/v1", v1.router)
@@ -186,10 +190,12 @@ func (m *NetworkManager) Run(_ context.Context) {
 		)
 	}
 
-	m.createServer(8443)
+	if err := m.createServer(8443); err != nil {
+		m.logger.Error("temp", "err", err)
+	}
 }
 
-func (m *NetworkManager) createServer(port int) {
+func (m *NetworkManager) createServer(port int) error {
 	hs := &http.Server{
 		Addr:         fmt.Sprintf(":%d", port),
 		ReadTimeout:  5 * time.Second,
@@ -202,8 +208,55 @@ func (m *NetworkManager) createServer(port int) {
 		Handler: m.router,
 	}
 
-	err := hs.ListenAndServeTLS("", "")
-	m.logger.Error("temp", "err", err)
+	m.h3s = &webtransport.Server{
+		H3: http3.Server{
+			Addr: fmt.Sprintf(":%d", port),
+			TLSConfig: &tls.Config{
+				MinVersion:     tls.VersionTLS12,
+				GetCertificate: m.resolveCertificate,
+			},
+			Handler: m.router,
+		},
+	}
+
+	// Open the listeners
+	udpAddr, err := net.ResolveUDPAddr("udp", m.h3s.H3.Addr)
+	if err != nil {
+		return err
+	}
+
+	udpConn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return err
+	}
+
+	defer udpConn.Close()
+
+	hErr := make(chan error, 1)
+	qErr := make(chan error, 1)
+
+	go func() {
+		hErr <- hs.ListenAndServeTLS("", "")
+	}()
+
+	go func() {
+		qErr <- m.h3s.Serve(udpConn)
+	}()
+
+	select {
+	case err := <-hErr:
+		_ = m.h3s.Close()
+
+		return err
+	case err := <-qErr:
+		_ = hs.Close()
+
+		return err
+	}
+}
+
+func (m *NetworkManager) upgradeWT(w http.ResponseWriter, r *http.Request) (*webtransport.Session, error) {
+	return m.h3s.Upgrade(w, r)
 }
 
 func (m *NetworkManager) resolveCertificate(info *tls.ClientHelloInfo) (*tls.Certificate, error) {
@@ -222,9 +275,39 @@ func (m *NetworkManager) resolveCertificate(info *tls.ClientHelloInfo) (*tls.Cer
 	return cert, nil
 }
 
+type h3Hijacker struct {
+	middleware.WrapResponseWriter
+	hijacker http3.Hijacker
+	flusher  http.Flusher
+}
+
+func (h *h3Hijacker) StreamCreator() http3.StreamCreator {
+	return h.hijacker.StreamCreator()
+}
+
+func (h *h3Hijacker) Flush() {
+	h.flusher.Flush()
+}
+
+func newH3ResponseWrapper(w http.ResponseWriter, protoMajor int) middleware.WrapResponseWriter {
+	ww := middleware.NewWrapResponseWriter(w, protoMajor)
+
+	hijacker, ok := w.(http3.Hijacker)
+	if ok {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			panic("missing http flusher")
+		}
+
+		ww = &h3Hijacker{ww, hijacker, flusher}
+	}
+
+	return ww
+}
+
 func (m *NetworkManager) loggerMiddleware(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
-		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		ww := newH3ResponseWrapper(w, r.ProtoMajor)
 
 		t1 := time.Now()
 		defer func() {

@@ -2,7 +2,9 @@ package mediaserver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,19 +17,56 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
+	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
+	"github.com/quic-go/webtransport-go"
 )
 
+type wtUpgrader func(w http.ResponseWriter, r *http.Request) (*webtransport.Session, error)
+
 type v1API struct {
-	logger *slog.Logger
-	router *chi.Mux
+	logger     *slog.Logger
+	router     *chi.Mux
+	wtUpgrader wtUpgrader
 }
 
-func newV1API(logger *slog.Logger) (*v1API, error) {
+var errInvalidState = errors.New("invalid state")
+
+func (a *v1API) ConnectPluginTransport(
+	ctx context.Context,
+	_ v1.ConnectPluginTransportRequestObject,
+) (v1.ConnectPluginTransportResponseObject, error) {
+	r, w, ok := rrFromCtx(ctx)
+	if !ok {
+		return nil, fmt.Errorf("%w: rr missing", errInvalidState)
+	}
+
+	s, err := a.wtUpgrader(w, r)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upgrade session: %w", err)
+	}
+
+	a.logger.Info("upgraded!", "s", s.RemoteAddr())
+
+	go func() {
+		s, err := s.AcceptStream(context.Background())
+		a.logger.Info("accepted", "s", s, "err", err)
+
+		blob := make([]byte, 2)
+		s.Read(blob)
+
+		a.logger.Info("received", "b", string(blob))
+	}()
+
+	return nil, nil
+}
+
+func newV1API(logger *slog.Logger, wtUpgrader wtUpgrader) (*v1API, error) {
 	r := chi.NewRouter()
 
 	api := &v1API{
-		logger: logger,
-		router: r,
+		logger:     logger,
+		router:     r,
+		wtUpgrader: wtUpgrader,
 	}
 
 	r.Use(middleware.RequestID)
@@ -85,7 +124,9 @@ func newV1API(logger *slog.Logger) (*v1API, error) {
 	v1.HandlerWithOptions(
 		v1.NewStrictHandlerWithOptions(
 			api,
-			nil,
+			[]v1.StrictMiddlewareFunc{
+				requestResponseAccessorMiddleware,
+			},
 			v1.StrictHTTPServerOptions{
 				RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 					api.logger.Error(
@@ -139,15 +180,37 @@ func newV1API(logger *slog.Logger) (*v1API, error) {
 	return api, nil
 }
 
+type rrKeyType string
+
+type rrData struct {
+	r *http.Request
+	w http.ResponseWriter
+}
+
+const rrKey rrKeyType = "ct-http-reqresp"
+
+func requestResponseAccessorMiddleware(
+	f strictnethttp.StrictHTTPHandlerFunc,
+	_ string,
+) strictnethttp.StrictHTTPHandlerFunc {
+	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, args any) (any, error) {
+		return f(context.WithValue(ctx, rrKey, rrData{r: r, w: w}), w, r, args)
+	}
+}
+
+func rrFromCtx(ctx context.Context) (*http.Request, http.ResponseWriter, bool) {
+	u, ok := ctx.Value(rrKey).(rrData)
+
+	return u.r, u.w, ok
+}
+
 func (a *v1API) httpLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		ww := newH3ResponseWrapper(w, r.ProtoMajor)
 		t1 := time.Now()
+
 		defer func() {
-			ua := ww.Header().Get("User-Agent")
-			if ua == "" {
-				ua = r.Header.Get("User-Agent")
-			}
+			ua := r.Header.Get("User-Agent")
 
 			a.logger.Debug(
 				"Served API Request",
@@ -192,7 +255,7 @@ func (a *v1API) httpRecoverer(next http.Handler) http.Handler {
 }
 
 func writeResponse(w http.ResponseWriter, r *http.Request, status int, code string, msg string) {
-	w.WriteHeader(status)
+	render.Status(r, status)
 	render.JSON(w, r, &v1.ErrorResponse{
 		Error:   code,
 		Message: msg,

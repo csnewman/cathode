@@ -3,6 +3,11 @@ info:
   title: Cathode Media Server
   version: '1.0'
 paths:
+  /plugin/transport:
+    connect:
+      summary: Plugin Transport Connect
+      operationId: connect-plugin-transport
+      description: Opens a WebTransport based bidi stream.
   /transcode/{transcodeId}/manifest.m3u8:
     get:
       summary: Transcode Manifest M3U8
